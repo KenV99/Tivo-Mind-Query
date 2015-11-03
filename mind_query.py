@@ -10,7 +10,7 @@ import sys
 config.init([])
 config.init_logging()
 
-tsn = '8490001902018ED'  # Edited for privacy
+tsn = '8490001XXXXXXXXX'  # Insert your TSN
 mmind = getMind(tsn)
 
 lang = "English"
