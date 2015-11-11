@@ -25,7 +25,7 @@ result = []
 while bottom is False:
     if subtitle:
         data = {
-            'bodyId': 'tsn:' + tsn,
+            # 'bodyId': 'tsn:' + tsn,
             'type': 'contentSearch',
             'title': title,
             "descriptionLanguage": "English",
@@ -37,7 +37,7 @@ while bottom is False:
         }
     else:
          data = {
-            'bodyId': 'tsn:' + tsn,
+            # 'bodyId': 'tsn:' + tsn,
             'type': 'contentSearch',
             'title': title,
             # 'collectionType': 'series',
@@ -47,7 +47,8 @@ while bottom is False:
             'count': '50',
             'levelOfDetail': 'medium'
         }
-    sr = mmind._Mind__dict_request(data, 'contentSearch&bodyId=tsn:' + tsn)  # Access private member
+    sr = mmind._Mind__dict_request(data, 'contentSearch')  # Access private member
+    # sr = mmind._Mind__dict_request(data, 'contentSearch&bodyId=tsn:' + tsn)  # Access private member
     cL = sr.findall('content')
     for content in cL:
         try:
