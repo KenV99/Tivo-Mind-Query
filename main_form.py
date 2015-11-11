@@ -25,6 +25,7 @@ from mind_query_rpc import RemoteExt
 import os, sys
 from ConfigParser import SafeConfigParser
 import ctypes
+import pickle
 
 class Settings(object):
     def __init__(self):
@@ -274,6 +275,9 @@ class MyFrame1(wx.Frame):
         gbSizer1.Add(self.choLimit, wx.GBPosition(4, 1), wx.GBSpan(1, 1), wx.ALL, 5)
 
         cmbTxtSearchChoices = []
+        choices = sessiondata.data['MRU1']
+        for choice in choices:
+            cmbTxtSearchChoices.append(choice)
         self.cmbTxtSearch = wx.ComboBox(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize,
                                         cmbTxtSearchChoices, 0|wx.TAB_TRAVERSAL)
         gbSizer1.Add(self.cmbTxtSearch, wx.GBPosition(0, 1), wx.GBSpan(1, 1), wx.ALL, 5)
@@ -307,7 +311,7 @@ class MyFrame1(wx.Frame):
         self.Centre(wx.BOTH)
 
         # Connect Events
-        self.Bind(wx.EVT_MENU, self.showSettings, id=self.miSettings.GetId())
+        # self.Bind(wx.EVT_MENU, self.showSettings, id=self.miSettings.GetId())
         self.m_button2.Bind(wx.EVT_BUTTON, self.do_search)
         self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
         self.m_button2.SetDefault()
@@ -332,6 +336,13 @@ class MyFrame1(wx.Frame):
     def do_search(self, event):
         wait = wx.BusyCursor()
         searchString = self.cmbTxtSearch.Value
+        if searchString != '':
+            sessiondata.data['MRU1'].insert(0, searchString)
+            if len(sessiondata.data['MRU1']) > 10:
+                x = sessiondata.data['MRU1'][0:10]
+                sessiondata.data['MRU1'] = x
+            sessiondata.saveData()
+            self.cmbTxtSearch.Insert(searchString, 0)
         searchType = self.choObj.GetStringSelection().replace(" ", "")
         searchType = lowerfirst(searchType)
         searchField = self.choField.GetStringSelection().replace(" ", "")
@@ -390,6 +401,36 @@ def lowerfirst(s):
     func = lambda s: s[:1].lower() + s[1:] if s else ''
     return func(s)
 
+class SessionData(object):
+
+    def __init__(self):
+        self.keys = ['MRU1', 'MRU2']
+        self.fn = os.path.join(os.getcwd(),'sessiondata.pkl')
+        self.data = {}
+
+    def setdefaults(self):
+        for key in self.keys:
+            self.data[key]=[]
+
+    def getData(self):
+        try:
+            f = open(self.fn, 'rb')
+            x = pickle.load(f)
+            self.data = x
+            f.close()
+        except Exception as e:
+            pass
+            self.setdefaults()
+
+    def saveData(self):
+        try:
+            f = open(self.fn, 'wb')
+            pickle.dump(self.data, f, -1)
+            f.close()
+        except:
+            pass
+
+
 
 class MyApp(wx.App):
 
@@ -409,6 +450,8 @@ class MyApp(wx.App):
 
 if __name__ == '__main__':
     settings = Settings()
+    sessiondata = SessionData()
+    sessiondata.getData()
     colnames = ['Temp']
     data = [('1', {'Temp':'temp'})]
     # colnames, data = get_data(test=True)
