@@ -21,11 +21,12 @@ import wx
 import wx.grid as Grid
 import wx.grid
 import wx.xrc
-from mind_query_rpc import RemoteExt
+from mind_query_rpc import ThreadedQueryX
 import os, sys
 from ConfigParser import SafeConfigParser
 import ctypes
-import pickle
+import cPickle as pickle
+import time
 
 class Settings(object):
     def __init__(self):
@@ -59,12 +60,42 @@ class Settings(object):
         except Exception as e:
             pass
 
-# from wx.lib.dialogs import ScrolledMessageDialog
-#
-# def InfoText(parent, message, caption='Mind Server Error'):
-#     dlg = ScrolledMessageDialog(parent, message, caption)
-#     dlg.ShowModal()
-#     dlg.Destroy()
+
+class PromptingComboBox(wx.ComboBox) :
+    def __init__(self, parent, value, choices=[], style=0, **par):
+        wx.ComboBox.__init__(self, parent, wx.ID_ANY, value, style=style|wx.CB_DROPDOWN, choices=choices, **par)
+        self.choices = choices
+        self.Bind(wx.EVT_TEXT, self.EvtText)
+        self.Bind(wx.EVT_CHAR, self.EvtChar)
+        self.Bind(wx.EVT_COMBOBOX, self.EvtCombobox)
+        self.ignoreEvtText = False
+
+    def EvtCombobox(self, event):
+        self.ignoreEvtText = True
+        event.Skip()
+
+    def EvtChar(self, event):
+        if event.GetKeyCode() == 8:
+            self.ignoreEvtText = True
+        event.Skip()
+
+    def EvtText(self, event):
+        if self.ignoreEvtText:
+            self.ignoreEvtText = False
+            return
+        currentText = event.GetString()
+        found = False
+        for choice in self.choices :
+            if choice.lower().startswith(currentText.lower()):
+                self.ignoreEvtText = True
+                self.SetValue(choice)
+                self.SetInsertionPoint(len(currentText))
+                self.SetTextSelection(len(currentText), len(choice))
+                found = True
+                break
+        if not found:
+            event.Skip()
+
 
 def Info(parent, message, caption='Mind Server Error'):
     dlg =wx.MessageDialog(parent,message,caption, wx.OK|wx.ICON_ERROR)
@@ -209,7 +240,7 @@ class KGrid(Grid.Grid):
 
 class MyFrame1(wx.Frame):
     def __init__(self, parent):
-        wx.Frame.__init__(self, parent, id=wx.ID_ANY, title=wx.EmptyString, pos=wx.DefaultPosition,
+        wx.Frame.__init__(self, parent, id=wx.ID_ANY, title='TiVo Mind Query', pos=wx.DefaultPosition,
                           size=wx.Size(1028, 772),
                           style=wx.DEFAULT_FRAME_STYLE | wx.RESIZE_BORDER | wx.TAB_TRAVERSAL)
 
@@ -234,22 +265,37 @@ class MyFrame1(wx.Frame):
         gbSizer1.SetFlexibleDirection(wx.BOTH)
         gbSizer1.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
 
-        self.m_staticText4 = wx.StaticText(self, wx.ID_ANY, u"Text Search", wx.DefaultPosition, wx.DefaultSize, 0)
+        self.m_staticText4 = wx.StaticText(self, wx.ID_ANY, u"Text Search 1", wx.DefaultPosition, wx.DefaultSize, 0)
         self.m_staticText4.Wrap(-1)
         gbSizer1.Add(self.m_staticText4, wx.GBPosition(0, 0), wx.GBSpan(1, 1), wx.ALL, 5)
 
+        self.m_staticText5 = wx.StaticText(self, wx.ID_ANY, u"Text Search 2", wx.DefaultPosition, wx.DefaultSize, 0)
+        self.m_staticText5.Wrap(-1)
+        gbSizer1.Add(self.m_staticText5, wx.GBPosition(1, 0), wx.GBSpan(1, 1), wx.ALL, 5)
+
         self.m_staticText17 = wx.StaticText(self, wx.ID_ANY, u"Search Type", wx.DefaultPosition, wx.DefaultSize, 0)
         self.m_staticText17.Wrap(-1)
-        gbSizer1.Add(self.m_staticText17, wx.GBPosition(1, 0), wx.GBSpan(1, 1), wx.ALL, 5)
+        gbSizer1.Add(self.m_staticText17, wx.GBPosition(2, 0), wx.GBSpan(1, 1), wx.ALL, 5)
 
         self.m_staticText18 = wx.StaticText(self, wx.ID_ANY, u"Search Field", wx.DefaultPosition, wx.DefaultSize, 0)
         self.m_staticText18.Wrap(-1)
-        gbSizer1.Add(self.m_staticText18, wx.GBPosition(2, 0), wx.GBSpan(1, 1), wx.ALL, 5)
+        gbSizer1.Add(self.m_staticText18, wx.GBPosition(0, 2), wx.GBSpan(1, 1), wx.ALL, 5)
 
-        choFieldChoices = [u"Title", u"Title Prefix",u"Subtitle (episode)", u"Keyword",  u"Title Keyword", u"Subtitle Keyword", u"Description Keyword"]
-        self.choField = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choFieldChoices, 0|wx.TAB_TRAVERSAL)
-        self.choField.SetSelection(0)
-        gbSizer1.Add(self.choField, wx.GBPosition(2, 1), wx.GBSpan(1, 1), wx.ALL, 5)
+        choFieldChoices = [u"Title", u"Title Prefix",u"Subtitle", u"Subtitle Prefix", u"Keyword",  u"Title Keyword", u"Subtitle Keyword", u"Description Keyword"]
+        self.choField1 = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choFieldChoices, 0 | wx.TAB_TRAVERSAL)
+        self.choField1.SetToolTip ('Note: for series subtitle is episode name')
+        self.choField1.SetSelection(0)
+        gbSizer1.Add(self.choField1, wx.GBPosition(0, 3), wx.GBSpan(1, 1), wx.ALL, 5)
+
+        self.m_staticText21 = wx.StaticText(self, wx.ID_ANY, u"Search Field", wx.DefaultPosition, wx.DefaultSize, 0)
+        self.m_staticText21.Wrap(-1)
+        gbSizer1.Add(self.m_staticText21, wx.GBPosition(1, 2), wx.GBSpan(1, 1), wx.ALL, 5)
+
+        choFieldChoices = [u"Title", u"Title Prefix",u"Subtitle", u"Subtitle Prefix", u"Keyword",  u"Title Keyword", u"Subtitle Keyword", u"Description Keyword"]
+        self.choField2 = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choFieldChoices, 0 | wx.TAB_TRAVERSAL)
+        self.choField2.SetToolTip ('Note: for series subtitle is episode name')
+        self.choField2.SetSelection(0)
+        gbSizer1.Add(self.choField2, wx.GBPosition(1, 3), wx.GBSpan(1, 1), wx.ALL, 5)
 
         self.m_staticText19 = wx.StaticText(self, wx.ID_ANY, u"Language", wx.DefaultPosition, wx.DefaultSize, 0)
         self.m_staticText19.Wrap(-1)
@@ -267,7 +313,7 @@ class MyFrame1(wx.Frame):
         choObjChoices = [u"Content Search", u"Offer Search", u"Collection Search"]
         self.choObj = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choObjChoices, 0|wx.TAB_TRAVERSAL)
         self.choObj.SetSelection(0)
-        gbSizer1.Add(self.choObj, wx.GBPosition(1, 1), wx.GBSpan(1, 1), wx.ALL, 5)
+        gbSizer1.Add(self.choObj, wx.GBPosition(2, 1), wx.GBSpan(1, 1), wx.ALL, 5)
 
         choLimitChoices = [ wx.EmptyString, u"movie", u"series", u"special"]
         self.choLimit = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choLimitChoices, 0|wx.TAB_TRAVERSAL)
@@ -278,9 +324,19 @@ class MyFrame1(wx.Frame):
         choices = sessiondata.data['MRU1']
         for choice in choices:
             cmbTxtSearchChoices.append(choice)
-        self.cmbTxtSearch = wx.ComboBox(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize,
-                                        cmbTxtSearchChoices, 0|wx.TAB_TRAVERSAL)
-        gbSizer1.Add(self.cmbTxtSearch, wx.GBPosition(0, 1), wx.GBSpan(1, 1), wx.ALL, 5)
+        # self.cmbTxtSearch1 = wx.ComboBox(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize,
+        #                                  cmbTxtSearchChoices, 0 | wx.TAB_TRAVERSAL)
+        self.cmbTxtSearch1 = PromptingComboBox(self, '', cmbTxtSearchChoices)
+        gbSizer1.Add(self.cmbTxtSearch1, wx.GBPosition(0, 1), wx.GBSpan(1, 1), wx.ALL, 5)
+
+        cmbTxtSearchChoices = []
+        choices = sessiondata.data['MRU2']
+        for choice in choices:
+            cmbTxtSearchChoices.append(choice)
+        # self.cmbTxtSearch2 = wx.ComboBox(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize,
+        #                                  cmbTxtSearchChoices, 0 | wx.TAB_TRAVERSAL)
+        self.cmbTxtSearch2 = PromptingComboBox(self, '', cmbTxtSearchChoices)
+        gbSizer1.Add(self.cmbTxtSearch2, wx.GBPosition(1, 1), wx.GBSpan(1, 1), wx.ALL, 5)
 
         self.m_button2 = wx.Button(self, wx.ID_ANY, u"&Search", wx.DefaultPosition, wx.DefaultSize, 0|wx.TAB_TRAVERSAL)
 
@@ -307,22 +363,77 @@ class MyFrame1(wx.Frame):
         self.SetSizer(bSizer1)
         self.grid.Hide()
         self.Layout()
+        self.m_statusBar1 = self.CreateStatusBar( 1, wx.STB_SIZEGRIP, wx.ID_ANY )
 
         self.Centre(wx.BOTH)
 
         # Connect Events
-        # self.Bind(wx.EVT_MENU, self.showSettings, id=self.miSettings.GetId())
         self.m_button2.Bind(wx.EVT_BUTTON, self.do_search)
         self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
-        self.m_button2.SetDefault()
-        self.cmbTxtSearch.SetFocus()
+        self.cmbTxtSearch1.Bind(wx.EVT_CONTEXT_MENU, self.MenuToClrMRU1)
+        self.cmbTxtSearch2.Bind(wx.EVT_CONTEXT_MENU, self.MenuToClrMRU2)
 
-        # self.result_grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.sort_grid)
+
+        self.m_button2.SetDefault()
+        self.cmbTxtSearch1.SetFocus()
+
+        # TAB Traversal
+        self.TabTrav = {self.cmbTxtSearch1:1, self.choField1:2, self.cmbTxtSearch2:3, self.choField2:4, self.choObj:5, self.cmbLang:6, self.choLimit:7, self.m_button2:8}
+
+    def MenuToClrMRU1(self, evt):
+
+        menu = wx.Menu()
+        sortID = wx.NewId()
+        menu.Append(sortID, "Clear List")
+
+        def ClrMRU(event):
+            sessiondata.data['MRU1'] = []
+            sessiondata.saveData()
+            self.cmbTxtSearch1.choices = []
+            self.cmbTxtSearch1.Items = []
+
+        self.Bind(wx.EVT_MENU, ClrMRU, id=sortID)
+
+        self.PopupMenu(menu)
+        menu.Destroy()
+        return
+
+    def MenuToClrMRU2(self, evt):
+
+        menu = wx.Menu()
+        sortID = wx.NewId()
+        menu.Append(sortID, "Clear List")
+
+        def ClrMRU(event):
+            sessiondata.data['MRU2'] = []
+            sessiondata.saveData()
+            self.cmbTxtSearch2.choices = []
+            self.cmbTxtSearch2.Items = []
+
+        self.Bind(wx.EVT_MENU, ClrMRU, id=sortID)
+
+        self.PopupMenu(menu)
+        menu.Destroy()
+        return
 
     def OnKeyDown(self, evt):
         key = evt.GetKeyCode()
         if key == wx.WXK_RETURN:
             self.do_search(evt)
+        elif key == wx.WXK_TAB:
+            shiftDown = evt.ShiftDown()
+            currentFocus = self.FindFocus()
+            i_currentFocus = self.TabTrav[currentFocus]
+            if shiftDown is False:
+                i_ctlToFocus = i_currentFocus + 1
+            else:
+                i_ctlToFocus = i_currentFocus - 1
+            if i_ctlToFocus > 8:
+                i_ctlToFocus = 1
+            if i_ctlToFocus < 1:
+                i_ctlToFocus = 8
+            ctlToFocus = self.TabTrav.keys()[self.TabTrav.values().index(i_ctlToFocus)]
+            ctlToFocus.SetFocus()
         else:
             evt.Skip()
 
@@ -334,30 +445,67 @@ class MyFrame1(wx.Frame):
         event.Skip()
 
     def do_search(self, event):
+        timestart = time.time()
         wait = wx.BusyCursor()
-        searchString = self.cmbTxtSearch.Value
-        if searchString != '':
-            sessiondata.data['MRU1'].insert(0, searchString)
-            if len(sessiondata.data['MRU1']) > 10:
-                x = sessiondata.data['MRU1'][0:10]
-                sessiondata.data['MRU1'] = x
+        searchString1 = self.cmbTxtSearch1.Value
+        searchString2 = self.cmbTxtSearch2.Value
+        dirty = False
+        if searchString1 != '':
+            if searchString1.lower() not in [x.lower() for x in sessiondata.data['MRU1']]:
+                sessiondata.data['MRU1'].insert(0, searchString1)
+                if len(sessiondata.data['MRU1']) > 10:
+                    x = sessiondata.data['MRU1'][0:10]
+                    sessiondata.data['MRU1'] = x
+                dirty = True
+                self.cmbTxtSearch1.Insert(searchString1, 0)
+                self.cmbTxtSearch1.choices = sessiondata.data['MRU1']
+        if searchString2 != '':
+            if searchString2.lower() not in [x.lower() for x in sessiondata.data['MRU2']]:
+                sessiondata.data['MRU2'].insert(0, searchString2)
+                if len(sessiondata.data['MRU2']) > 10:
+                    x = sessiondata.data['MRU2'][0:10]
+                    sessiondata.data['MRU2'] = x
+                dirty = True
+                self.cmbTxtSearch2.Insert(searchString2, 0)
+                self.cmbTxtSearch2.choices = sessiondata.data['MRU2']
+        if dirty:
             sessiondata.saveData()
-            self.cmbTxtSearch.Insert(searchString, 0)
         searchType = self.choObj.GetStringSelection().replace(" ", "")
         searchType = lowerfirst(searchType)
-        searchField = self.choField.GetStringSelection().replace(" ", "")
-        searchField = lowerfirst(searchField)
+        searchField1 = self.choField1.GetStringSelection().replace(" ", "")
+        searchField1 = lowerfirst(searchField1)
+        searchField2 = self.choField2.GetStringSelection().replace(" ", "")
+        searchField2 = lowerfirst(searchField2)
         searchLang = self.cmbLang.Value
         searchLimit = self.choLimit.GetStringSelection()
-        un = settings.un
-        pw = settings.pw
-        tsn = settings.tsn
-        remote = RemoteExt(un, pw, tsn)
-        kwargs = {searchField:searchString, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
-        results = remote.genericSearch(searchType, **kwargs)
-        if 'error' in results[0].keys():
-            Info(self, results[0]['error'])
-            return
+        if searchString2 == '':
+            if searchLimit != '':
+                kwargs = {searchField1:searchString1, 'collectionType':searchLimit, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
+            else:
+                kwargs = {searchField1:searchString1, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
+        else:
+            if searchLimit != '':
+                kwargs = {searchField1:searchString1, searchField2:searchString2, 'collectionType':searchLimit, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
+            else:
+                kwargs = {searchField1:searchString1, searchField2:searchString2, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
+
+        self.m_statusBar1.SetStatusText('Searching mind...')
+
+        results = ThreadedQueryX(settings, searchType, **kwargs)
+
+        self.m_statusBar1.SetStatusText('Processing results...')
+
+        try:
+            if 'error' in results[0].keys():
+                self.m_statusBar1.SetStatusText('Error')
+                Info(self, results[0]['error'])
+                self.Layout()
+                return
+        except:
+                self.m_statusBar1.SetStatusText('Error')
+                Info(self, "Search returned no results")
+                self.Layout()
+                return
         if searchType == 'contentSearch':
             coldict = {'collectionType':'Type', 'seasonEpisodeNum': 'SE#EP#', 'title': 'Series Title', 'subtitle':'Episode Title',
                        'originalAirdate':'Orig Air Date', 'partnerCollectionId': 'Series ID',
@@ -367,10 +515,10 @@ class MyFrame1(wx.Frame):
                        'Episode ID', 'Description']
         elif searchType == 'offerSearch':
             coldict = {'collectionType':'Type', 'seasonEpisodeNum': 'SE#EP#', 'title': 'Series Title', 'subtitle':'Episode Title',
-                       'originalAirdate':'Orig Air Date', 'startTime':'Upcoming date/time', 'partnerCollectionId': 'Series ID',
+                       'originalAirdate':'Orig Air Date', 'startTime':'Upcoming date/time', 'channel':'Channel', 'partnerCollectionId': 'Series ID',
                        'partnerContentId': 'Episode ID', 'description': 'Description'}
             colnames = ['Type', 'SE#EP#', 'Series Title', 'Episode Title',
-                       'Orig Air Date', 'Upcoming date/time','Series ID',
+                       'Orig Air Date', 'Upcoming date/time', 'Channel', 'Series ID',
                        'Episode ID', 'Description']
         else:  #'collectionSearch'
             coldict = {'title': 'Title', 'collectionType':'Type', 'partnerCollectionId': 'Series ID',
@@ -395,6 +543,8 @@ class MyFrame1(wx.Frame):
         except Exception as e:
             pass
         del wait
+        e_time = time.time()-timestart
+        self.m_statusBar1.SetStatusText('Done: %i records retrieved in %f secs' % (len(results), e_time))
         self.Layout()
 
 def lowerfirst(s):
@@ -454,7 +604,6 @@ if __name__ == '__main__':
     sessiondata.getData()
     colnames = ['Temp']
     data = [('1', {'Temp':'temp'})]
-    # colnames, data = get_data(test=True)
 
     app = MyApp(0)     # Create an instance of the application class
     app.MainLoop()     # Tell it to start processing events
