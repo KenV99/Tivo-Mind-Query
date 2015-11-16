@@ -17,16 +17,21 @@
 #    along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+import cPickle as pickle
+import ctypes
+import os
+import sys
+import time
+import traceback
+from ConfigParser import SafeConfigParser
+
 import wx
 import wx.grid as Grid
 import wx.grid
 import wx.xrc
+
 from mind_query_rpc import ThreadedQueryX
-import os, sys
-from ConfigParser import SafeConfigParser
-import ctypes
-import cPickle as pickle
-import time
+
 
 class Settings(object):
     def __init__(self):
@@ -101,6 +106,29 @@ def Info(parent, message, caption='Mind Server Error'):
     dlg =wx.MessageDialog(parent,message,caption, wx.OK|wx.ICON_ERROR)
     dlg.ShowModal()
     dlg.Destroy()
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """ handle all exceptions """
+
+    ## KeyboardInterrupt is a special case.
+    ## We don't raise the error dialog when it occurs.
+    if issubclass(exc_type, KeyboardInterrupt):
+        app.ExitMainLoop()
+        return
+
+    filename, line, dummy, dummy = traceback.extract_tb(exc_traceback).pop()
+    filename = os.path.basename(filename)
+    error = "%s: %s" % (exc_type.__name__, exc_value)
+    try:
+        parent = app.frame
+    except:
+        parent = None
+    Info(parent, "A critical error has occured.\n%s\nIt occurred at line %d of file %s" % (error, line, filename),
+             caption='Critical Error')
+    print "Closed due to an error. This is the full error report:"
+    print
+    print "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    sys.exit(1)
 
 class KGrid(Grid.Grid):
     def __init__(self, parent, data, colnames):
@@ -588,17 +616,18 @@ class MyApp(wx.App):
     def OnInit(self):
 
         # Create an instance of our customized Frame class
-        frame = MyFrame1(None)
-        frame.Show(True)
+        self.frame = MyFrame1(None)
+        self.frame.Show(True)
 
         # Tell wxWindows that this is our main window
-        self.SetTopWindow(frame)
+        self.SetTopWindow(self.frame)
 
         # Return a success flag
         return True
 
 
 if __name__ == '__main__':
+    sys.excepthook = handle_exception
     settings = Settings()
     sessiondata = SessionData()
     sessiondata.getData()
