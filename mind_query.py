@@ -17,6 +17,50 @@
 #    along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+import dependencies
+try:
+    import wx
+except ImportError:
+    try:
+        import wxversion
+        wxversion.select('3.0')
+        import wx
+    except ImportError:
+        dependency_dict = {'wx':['--upgrade','--trusted-host', 'wxpython.org', '--pre', '-f', 'http://wxpython.org/Phoenix/snapshot-builds/', 'wxPython_Phoenix']}
+        dependencies.InstallDependencies(dependency_dict)
+        try:
+            import wx
+        except:
+            import sys
+            sys.exit(-1)
+try:
+    dependencies.InstallDependencies({'concurrent.futures':['futures']})
+except Exception as e:
+    print 'Exiting due to import errors: %s' % str(e)
+    import sys
+    sys.exit(-1)
+
+if 'phoenix'in wx.PlatformInfo:
+    PHOENIX = True
+else:
+    PHOENIX = False
+
+if PHOENIX:
+    try:
+        import wx.grid as Grid
+        import wx.grid
+        import wx.xrc
+    except Exception as e:
+        pass
+else:
+    try:
+        import wx.grid as Grid
+        import wx.grid
+        import wx.xrc
+    except Exception as e:
+        pass
+
+
 import cPickle as pickle
 import ctypes
 import os
@@ -24,11 +68,6 @@ import sys
 import time
 import traceback
 from ConfigParser import SafeConfigParser
-
-import wx
-import wx.grid as Grid
-import wx.grid
-import wx.xrc
 
 from mind_query_rpc import ThreadedQueryX
 
@@ -311,7 +350,10 @@ class MyFrame1(wx.Frame):
 
         choFieldChoices = [u"Title", u"Title Prefix",u"Subtitle", u"Subtitle Prefix", u"Keyword",  u"Title Keyword", u"Subtitle Keyword", u"Description Keyword"]
         self.choField1 = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choFieldChoices, 0 | wx.TAB_TRAVERSAL)
-        self.choField1.SetToolTip ('Note: for series subtitle is episode name')
+        if PHOENIX:
+            self.choField1.SetToolTip ('Note: for series subtitle is episode name')
+        else:
+            self.choField1.SetToolTip (wx.ToolTip('Note: for series subtitle is episode name'))
         self.choField1.SetSelection(0)
         gbSizer1.Add(self.choField1, wx.GBPosition(0, 3), wx.GBSpan(1, 1), wx.ALL, 5)
 
@@ -321,7 +363,10 @@ class MyFrame1(wx.Frame):
 
         choFieldChoices = [u"Title", u"Title Prefix",u"Subtitle", u"Subtitle Prefix", u"Keyword",  u"Title Keyword", u"Subtitle Keyword", u"Description Keyword"]
         self.choField2 = wx.Choice(self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choFieldChoices, 0 | wx.TAB_TRAVERSAL)
-        self.choField2.SetToolTip ('Note: for series subtitle is episode name')
+        if PHOENIX:
+            self.choField2.SetToolTip ('Note: for series subtitle is episode name')
+        else:
+            self.choField2.SetToolTip (wx.ToolTip('Note: for series subtitle is episode name'))
         self.choField2.SetSelection(0)
         gbSizer1.Add(self.choField2, wx.GBPosition(1, 3), wx.GBSpan(1, 1), wx.ALL, 5)
 

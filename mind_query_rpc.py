@@ -39,7 +39,7 @@ class RemoteExt(rpcSearch102.Remote):
                                            ))
         result = self.Read()
         if result['status'] != 'success':
-            rpcSearch102.logging.error('Authentication failed!  Got: %s', result)
+            print 'Authentication failed!  Got: %s', result
             rpcSearch102.sys.exit(1)
 
     def WriteReadX(self, rtype, **kwargs):

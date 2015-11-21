@@ -88,7 +88,7 @@ class Remote(object):
     buf = self.buf[:need_len]
     self.buf = self.buf[need_len:]
 
-    logging.debug('READ %s', buf)
+    # logging.debug('READ %s', buf)
     return json.loads(buf[-1 * body_len:])
 
   def Write(self, data):
