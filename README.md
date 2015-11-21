@@ -8,7 +8,8 @@ Requires:
 
 futures 3.03
 
-wxPython Phoenix
+wx Python or wxPython-Phoenix
 
 
-Launch by running mind_query.py
+Launch by running mind_query.py from command line at least first time.
+If wxPython or futures is not installed user will be prompted for download/install from command line.
