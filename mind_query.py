@@ -16,8 +16,11 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+try:
+    import dependencies
+except Exception as e:
+    'Error during initial installation: %s' % str(e)
 
-import dependencies
 try:
     import wx
 except ImportError:

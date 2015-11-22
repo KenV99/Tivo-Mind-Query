@@ -19,18 +19,37 @@
 
 import os, sys
 
+try:
+    import pip
+except ImportError:
+    print 'Downloading/installing required module: pip'
+    try:
+        import subprocess
+        res = subprocess.check_call([sys.executable, 'get-pip.py'])
+        if res != 0:
+            raise ImportError
+    except ImportError:
+        raise  ImportError('Could not install pip')
+    except Exception as e:
+        raise e
+    else:
+        try:
+            import pip
+        except Exception as e:
+            raise e
+
 def InstallDependencies(dependency_dict):
     try:
-        import pip, importlib, copy
+        import importlib, copy
     except ImportError:
-        raise ImportError('Required base libraries not installed (pip, importlib or copy')
+        raise ImportError('Required base libraries not installed (importlib or copy')
     pip_args = [ '-vvv' ]
     try:
         proxy = os.environ['http_proxy']
     except Exception as e:
         sys.exc_clear()
         proxy = None
-    if proxy:
+    if proxy is not None:
         pip_args.append('--proxy')
         pip_args.append(proxy)
     pip_args.append('install')
@@ -41,6 +60,8 @@ def InstallDependencies(dependency_dict):
                 raise ImportError("Required package not installed by user choice.")
             pai = copy.copy(pip_args)
             try:
+                if '--upgrade' in dependency_dict[req] or '-U' in dependency_dict[req]:
+                    raise ImportError
                 importlib.import_module(req)
             except ImportError:
                 if dependency_dict[req] != []:
@@ -51,12 +72,14 @@ def InstallDependencies(dependency_dict):
                     res = pip.main(args=pai)
                     if res == 1:
                         raise ImportError("Could not download/install required package: %s" % req)
-                except:
-                    ImportError("Could not download/install required package: %s" % req)
+                except Exception as e:
+                    raise ImportError("Could not download/install required package: %s" % req)
                 try:
                     importlib.import_module(req)
                 except ImportError:
                     ImportError("Could not import required package: %s after download/install" % req)
+            except Exception as e:
+                raise e
     except ImportError:
         raise
     except Exception as e:
@@ -94,6 +117,5 @@ def query_yes_no(question, default="yes"):
         else:
             sys.stdout.write("Please respond with 'yes' or 'no' "
                              "(or 'y' or 'n').\n")
-
 
 
