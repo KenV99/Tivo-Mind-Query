@@ -55,15 +55,17 @@ def InstallDependencies(dependency_dict):
     pip_args.append('install')
     try:
         for req in dependency_dict.keys():
-            q = "Python package containing: %s not intalled.\n Download and install?" % req
-            if query_yes_no(q) is False:
-                raise ImportError("Required package not installed by user choice.")
+
             pai = copy.copy(pip_args)
             try:
                 if '--upgrade' in dependency_dict[req] or '-U' in dependency_dict[req]:
                     raise ImportError
-                importlib.import_module(req)
+                else:
+                    importlib.import_module(req)
             except ImportError:
+                q = "Python package containing: %s not intalled.\n Download and install?" % req
+                if query_yes_no(q) is False:
+                    raise ImportError("Required package not installed by user choice.")
                 if dependency_dict[req] != []:
                     pai.extend(dependency_dict[req])
                 else:

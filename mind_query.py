@@ -15,11 +15,15 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program. If not, see <http://www.gnu.org/licenses/>.
-#
-try:
-    import dependencies
-except Exception as e:
-    'Error during initial installation: %s' % str(e)
+
+import sys
+FROZEN = getattr( sys, 'frozen', False )
+
+if not FROZEN:
+    try:
+        import dependencies
+    except Exception as e:
+        'Error during initial installation: %s' % str(e)
 
 try:
     import wx
@@ -29,19 +33,24 @@ except ImportError:
         wxversion.select('3.0')
         import wx
     except ImportError:
-        dependency_dict = {'wx':['--upgrade','--trusted-host', 'wxpython.org', '--pre', '-f', 'http://wxpython.org/Phoenix/snapshot-builds/', 'wxPython_Phoenix']}
-        dependencies.InstallDependencies(dependency_dict)
-        try:
-            import wx
-        except:
-            import sys
+        print 'Could not start wx'
+        if FROZEN:
             sys.exit(-1)
-try:
-    dependencies.InstallDependencies({'concurrent.futures':['futures']})
-except Exception as e:
-    print 'Exiting due to import errors: %s' % str(e)
-    import sys
-    sys.exit(-1)
+        else:
+            dependency_dict = {'wx':['--upgrade','--trusted-host', 'wxpython.org', '--pre', '-f', 'http://wxpython.org/Phoenix/snapshot-builds/', 'wxPython_Phoenix']}
+            dependencies.InstallDependencies(dependency_dict)
+            try:
+                import wx
+            except:
+                import sys
+                sys.exit(-1)
+if not FROZEN:
+    try:
+        dependencies.InstallDependencies({'concurrent.futures':['futures']})
+    except Exception as e:
+        print 'Exiting due to import errors: %s' % str(e)
+        import sys
+        sys.exit(-1)
 
 if 'phoenix'in wx.PlatformInfo:
     PHOENIX = True
@@ -63,9 +72,7 @@ else:
     except Exception as e:
         pass
 
-
 import cPickle as pickle
-import ctypes
 import os
 import sys
 import time
@@ -74,6 +81,10 @@ from ConfigParser import SafeConfigParser
 
 from mind_query_rpc import ThreadedQueryX
 
+def Info(parent, message, caption='Mind Server Error'):
+    dlg =wx.MessageDialog(parent,message,caption, wx.OK|wx.ICON_ERROR)
+    dlg.ShowModal()
+    dlg.Destroy()
 
 class Settings(object):
     def __init__(self):
@@ -90,11 +101,15 @@ class Settings(object):
             self.un = ''
             self.pw = ''
             self.tsn = ''
+
+    def check(self):
         if self.un == '' or self.pw == '':
-            msg = 'In order to use this program you MUST edit the ini file with your TiVo account\nuser name and password. For Offer Searches, you MUST also include your TSN.\nPlease relaunch the program after providing the info.'
-            MessageBox = ctypes.windll.user32.MessageBoxA
-            MessageBox(None, msg, 'Error - ini file incomplete', 0)
-            sys.exit(-1)
+            msg = u'In order to use this program you MUST provide your TiVo account\nuser name and password. For Offer Searches, you MUST also include your TSN'
+            Info(None, msg, caption='Error Tivo Credentials Missing')
+            sd = SettingsDialog(None)
+            sd.ShowModal()
+            if self.un == '' or self.pw== '':
+                sys.exit(-1)
 
     def createini(self):
         self.parser.add_section('settings')
@@ -105,7 +120,8 @@ class Settings(object):
             with open(self.fn, 'w') as f:
                 self.parser.write(f)
         except Exception as e:
-            pass
+            print 'Could not create ini file'
+            sys.exit(-1)
 
 
 class PromptingComboBox(wx.ComboBox) :
@@ -137,17 +153,14 @@ class PromptingComboBox(wx.ComboBox) :
                 self.ignoreEvtText = True
                 self.SetValue(choice)
                 self.SetInsertionPoint(len(currentText))
-                self.SetTextSelection(len(currentText), len(choice))
+                if PHOENIX:
+                    self.SetTextSelection(len(currentText), len(choice))
+                else:
+                    self.SetMark(len(currentText), len(choice))
                 found = True
                 break
         if not found:
             event.Skip()
-
-
-def Info(parent, message, caption='Mind Server Error'):
-    dlg =wx.MessageDialog(parent,message,caption, wx.OK|wx.ICON_ERROR)
-    dlg.ShowModal()
-    dlg.Destroy()
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     """ handle all exceptions """
@@ -317,11 +330,11 @@ class MyFrame1(wx.Frame):
         # self.SetSizeHintsSz(wx.DefaultSize, wx.DefaultSize)
 
         self.m_menubar1 = wx.MenuBar(0)
-        # self.mb_settings = wx.Menu()
-        # self.miSettings = wx.MenuItem(self.mb_settings, wx.ID_ANY, u"Settings", wx.EmptyString, wx.ITEM_NORMAL)
-        # self.mb_settings.Append(self.miSettings)
-        #
-        # self.m_menubar1.Append(self.mb_settings, u"Settings")
+        self.mb_settings = wx.Menu()
+        self.miSettings = wx.MenuItem(self.mb_settings, wx.ID_ANY, u"Edit Settings", wx.EmptyString, wx.ITEM_NORMAL)
+        self.mb_settings.AppendItem(self.miSettings)
+
+        self.m_menubar1.Append(self.mb_settings, u"Settings")
 
         self.SetMenuBar(self.m_menubar1)
 
@@ -444,6 +457,7 @@ class MyFrame1(wx.Frame):
         self.Centre(wx.BOTH)
 
         # Connect Events
+        self.Bind( wx.EVT_MENU, self.onMenu, id = self.miSettings.GetId() )
         self.m_button2.Bind(wx.EVT_BUTTON, self.do_search)
         self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
         self.cmbTxtSearch1.Bind(wx.EVT_CONTEXT_MENU, self.MenuToClrMRU1)
@@ -455,6 +469,10 @@ class MyFrame1(wx.Frame):
 
         # TAB Traversal
         self.TabTrav = {self.cmbTxtSearch1:1, self.choField1:2, self.cmbTxtSearch2:3, self.choField2:4, self.choObj:5, self.cmbLang:6, self.choLimit:7, self.m_button2:8}
+
+    def onMenu(self, evt):
+        sd = SettingsDialog(self)
+        sd.ShowModal()
 
     def MenuToClrMRU1(self, evt):
 
@@ -516,9 +534,6 @@ class MyFrame1(wx.Frame):
     def __del__(self):
         pass
 
-    # Virtual event handlers, overide them in your derived class
-    def showSettings(self, event):
-        event.Skip()
 
     def do_search(self, event):
         timestart = time.time()
@@ -657,6 +672,84 @@ class SessionData(object):
             pass
 
 
+class SettingsDialog(wx.Dialog):
+    def __init__(self, parent):
+        wx.Dialog.__init__(self, parent, id=wx.ID_ANY, title=u"Settings", pos=wx.DefaultPosition,
+                           size=wx.Size(307, 171), style=wx.DEFAULT_DIALOG_STYLE | wx.STAY_ON_TOP)
+
+        self.SetSizeHintsSz(wx.DefaultSize, wx.DefaultSize)
+
+        fgSizer1 = wx.FlexGridSizer(2, 1, 0, 0)
+        fgSizer1.SetFlexibleDirection(wx.BOTH)
+        fgSizer1.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+
+        fgSizer2 = wx.FlexGridSizer(4, 2, 0, 0)
+        fgSizer2.SetFlexibleDirection(wx.BOTH)
+        fgSizer2.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+
+        self.m_staticText1 = wx.StaticText(self, wx.ID_ANY, u"Tivo Account Name", wx.DefaultPosition, wx.DefaultSize,
+                                           wx.ALIGN_RIGHT)
+        self.m_staticText1.Wrap(-1)
+        fgSizer2.Add(self.m_staticText1, 0, wx.ALL, 5)
+
+        self.m_textAcct = wx.TextCtrl(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0)
+        fgSizer2.Add(self.m_textAcct, 0, wx.ALL, 5)
+
+        self.m_staticText2 = wx.StaticText(self, wx.ID_ANY, u"Tivo Account Password", wx.DefaultPosition,
+                                           wx.DefaultSize, 0)
+        self.m_staticText2.Wrap(-1)
+        fgSizer2.Add(self.m_staticText2, 0, wx.ALL, 5)
+
+        self.m_textPW = wx.TextCtrl(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0)
+        fgSizer2.Add(self.m_textPW, 0, wx.ALL, 5)
+
+        self.m_staticText3 = wx.StaticText(self, wx.ID_ANY, u"TSN", wx.DefaultPosition, wx.DefaultSize, 0)
+        self.m_staticText3.Wrap(-1)
+        fgSizer2.Add(self.m_staticText3, 0, wx.ALL, 5)
+
+        self.m_textTSN = wx.TextCtrl(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0)
+        fgSizer2.Add(self.m_textTSN, 0, wx.ALL, 5)
+
+        fgSizer1.Add(fgSizer2, 1, wx.EXPAND, 5)
+
+        m_sdbSizer1 = wx.StdDialogButtonSizer()
+        self.m_sdbSizer1OK = wx.Button(self, wx.ID_OK)
+        m_sdbSizer1.AddButton(self.m_sdbSizer1OK)
+        self.m_sdbSizer1Cancel = wx.Button(self, wx.ID_CANCEL)
+        m_sdbSizer1.AddButton(self.m_sdbSizer1Cancel)
+        m_sdbSizer1.Realize()
+
+        fgSizer1.Add(m_sdbSizer1, 1, wx.ALL | wx.EXPAND, 5)
+
+        self.m_textAcct.SetValue(settings.un)
+        self.m_textPW.SetValue(settings.pw)
+        self.m_textTSN.SetValue(settings.tsn)
+
+        self.SetSizer(fgSizer1)
+        self.Layout()
+
+        self.Centre(wx.BOTH)
+
+        # Connect Events
+        self.m_sdbSizer1Cancel.Bind(wx.EVT_BUTTON, self.onCancel)
+        self.m_sdbSizer1OK.Bind(wx.EVT_BUTTON, self.onOK)
+
+    def __del__(self):
+        pass
+
+    # Virtual event handlers, overide them in your derived class
+    def onCancel(self, event):
+        try:
+            self.EndModal()
+        except:
+            pass
+        self.Destroy()
+
+    def onOK(self, event):
+        settings.un = self.m_textAcct.GetValue()
+        settings.pw = self.m_textPW.GetValue()
+        settings.tsn = self.m_textTSN.GetValue()
+        self.Destroy()
 
 class MyApp(wx.App):
 
@@ -676,11 +769,12 @@ class MyApp(wx.App):
 
 if __name__ == '__main__':
     sys.excepthook = handle_exception
-    settings = Settings()
     sessiondata = SessionData()
     sessiondata.getData()
     colnames = ['Temp']
     data = [('1', {'Temp':'temp'})]
 
     app = MyApp(0)     # Create an instance of the application class
+    settings = Settings()
+    settings.check()
     app.MainLoop()     # Tell it to start processing events
