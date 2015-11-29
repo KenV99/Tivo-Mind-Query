@@ -73,6 +73,7 @@ else:
         pass
 
 import cPickle as pickle
+import re
 import os
 import sys
 import time
@@ -91,7 +92,7 @@ class Settings(object):
         self.fn = os.path.join(os.getcwd(), 'settings.ini')
         self.parser = SafeConfigParser()
         if os.path.isfile(self.fn) is False:
-            self.createini()
+            self.saveini()
         try:
             self.parser.read(self.fn)
             self.un = self.parser.get('settings','username')
@@ -111,17 +112,26 @@ class Settings(object):
             if self.un == '' or self.pw== '':
                 sys.exit(-1)
 
-    def createini(self):
-        self.parser.add_section('settings')
-        self.parser.set('settings' , 'username', '')
-        self.parser.set('settings', 'password', '')
-        self.parser.set('settings', 'tsn', '')
+    def saveini(self):
+        try:
+            self.parser.add_section('settings')
+        except:
+            pass
+        self.parser.set('settings' , 'username', self.un)
+        self.parser.set('settings', 'password', self.pw)
+        self.parser.set('settings', 'tsn', self.tsn)
+        if os.path.isfile(self.fn):
+            try:
+                os.remove(self.fn)
+            except:
+                print 'Could not delete old ini'
         try:
             with open(self.fn, 'w') as f:
                 self.parser.write(f)
         except Exception as e:
             print 'Could not create ini file'
             sys.exit(-1)
+
 
 
 class PromptingComboBox(wx.ComboBox) :
@@ -569,9 +579,16 @@ class MyFrame1(wx.Frame):
         searchField2 = lowerfirst(searchField2)
         searchLang = self.cmbLang.Value
         searchLimit = self.choLimit.GetStringSelection()
+        if searchField1 == 'keyword' or searchField1 == 'titleKeyword':
+            searchString1 = ' '.join(re.findall(r"[\w']+", searchString1))
+            if len(searchString1) == 1:
+                searchString1 = searchString1[0]
+        if searchField2 == 'keyword' or searchField2 == 'titleKeyword':
+            searchString2 = ' '.join(re.findall(r"[\w']+", searchString2))
         if searchString2 == '':
             if searchLimit != '':
                 kwargs = {searchField1:searchString1, 'collectionType':searchLimit, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
+
             else:
                 kwargs = {searchField1:searchString1, 'levelOfDetail':'medium', 'descriptionLanguage': searchLang}
         else:
@@ -749,6 +766,7 @@ class SettingsDialog(wx.Dialog):
         settings.un = self.m_textAcct.GetValue()
         settings.pw = self.m_textPW.GetValue()
         settings.tsn = self.m_textTSN.GetValue()
+        settings.saveini()
         self.Destroy()
 
 class MyApp(wx.App):
